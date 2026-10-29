@@ -43,14 +43,18 @@ export const remoteok = {
   },
 
   async search(params, { fetchJson, cached }) {
-    const feed = await cached('remoteok:feed', CACHE_TTL_MS, () => fetchJson(FEED_URL));
-    // The first entry is the API's legal notice, not a job.
-    const jobs = (Array.isArray(feed) ? feed : [])
-      .filter((raw) => raw?.id && raw.position && raw.url)
-      .map(normalizeRemoteOkJob)
-      .filter((job) => isOpenToEgypt(job.rawLocation))
+    // The feed is cleaned up once per download; each search only filters it.
+    const jobs = await cached('remoteok:jobs', CACHE_TTL_MS, async () => {
+      const feed = await fetchJson(FEED_URL);
+      // The first entry is the API's legal notice, not a job.
+      return (Array.isArray(feed) ? feed : [])
+        .filter((raw) => raw?.id && raw.position && raw.url)
+        .map(normalizeRemoteOkJob)
+        .filter((job) => isOpenToEgypt(job.rawLocation));
+    });
+    const matches = jobs
       .filter((job) => matchesKeywords([job.title, job.company, job.tags], params.q))
       .map(({ tags, rawLocation, ...job }) => job);
-    return pageOf(jobs, params.page);
+    return pageOf(matches, params.page);
   },
 };

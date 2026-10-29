@@ -1,5 +1,7 @@
 import { findArea } from '../areas.js';
-import { formatSalary, htmlToText, looksRemote, safeUrl, toIsoDate, truncate } from '../util.js';
+import {
+  describesRemoteWork, formatSalary, htmlToText, looksRemote, safeUrl, searchKeywords, toIsoDate, truncate,
+} from '../util.js';
 
 // Careerjet collects jobs from Egyptian job boards and company sites
 // (careerjet.com.eg). Docs: https://www.careerjet.com/partners/api/
@@ -26,7 +28,7 @@ export function normalizeCareerjetJob(raw, params) {
     company: htmlToText(raw.company) || null,
     companyLogo: null,
     location: locations || null,
-    remote: looksRemote(title, locations),
+    remote: looksRemote(title, locations) || describesRemoteWork(description),
     // Careerjet doesn't label each job's type, but results are already
     // filtered by the type that was asked for.
     type: params.type !== 'any' ? params.type : null,
@@ -62,7 +64,7 @@ export const careerjet = {
 
     const base = {
       locale_code: env.CAREERJET_LOCALE || 'en_EG',
-      keywords: [params.q, params.mode === 'remote' ? 'remote' : ''].filter(Boolean).join(' '),
+      keywords: searchKeywords(params),
       page: String(params.page),
       page_size: String(PAGE_SIZE),
       sort: params.q ? 'relevance' : 'date',

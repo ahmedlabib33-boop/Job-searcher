@@ -36,6 +36,15 @@ describe('SerpApi (Google Jobs)', () => {
     assert.equal(job.url, 'https://www.linkedin.com/jobs/view/1');
   });
 
+  it('stops paging after page 5', async () => {
+    const { ctx, requests } = fakeContext({ jobs_results: [serpJob], serpapi_pagination: { next_page_token: 'T' } },
+      { env: { SERPAPI_API_KEY: 'secret' } });
+    assert.equal((await serpapi.search(parseSearchParams({ page: '5' }), ctx)).hasMore, false);
+    const before = requests.length;
+    assert.deepEqual(await serpapi.search(parseSearchParams({ page: '6' }), ctx), { jobs: [], hasMore: false });
+    assert.equal(requests.length, before);
+  });
+
   it('pages with the token from the previous page and keeps the key out of cache keys', async () => {
     const { ctx, requests, cacheKeys } = fakeContext(({ url }) => (url.searchParams.has('next_page_token')
       ? { jobs_results: [{ ...serpJob, job_id: 'page-2' }] }
@@ -104,6 +113,13 @@ describe('Careerjet', () => {
     assert.equal(result.hasMore, true);
   });
 
+  it('marks jobs as remote when the description says so', () => {
+    const remote = normalizeCareerjetJob({ ...careerjetJob, description: 'This is a fully remote role.' }, parseSearchParams({}));
+    const onsite = normalizeCareerjetJob({ ...careerjetJob, description: 'Not a remote position, office in Maadi.' }, parseSearchParams({}));
+    assert.equal(remote.remote, true);
+    assert.equal(onsite.remote, false);
+  });
+
   it('falls back to all of Cairo when an area is not recognized', async () => {
     const { ctx, requests } = fakeContext(({ url }) => (url.searchParams.get('location') === 'Cairo'
       ? { type: 'JOBS', pages: 1, jobs: [careerjetJob] }
@@ -137,6 +153,7 @@ describe('Jooble', () => {
     assert.equal(job.type, 'fulltime');
     assert.equal(job.publisher, 'wuzzuf.net');
     assert.equal(job.url, 'https://eg.jooble.org/jdp/987654321');
+    assert.equal(job.postedAt, '2026-10-28T10:15:00.000Z');
   });
 
   it('posts the search with the key in the address', async () => {

@@ -87,16 +87,31 @@ function initials(text) {
   return (words.slice(0, 2).map((word) => [...word][0]).join('') || '?').toUpperCase();
 }
 
+// Saved jobs come back from localStorage, which anything on this origin can
+// write to, so links are checked again before they are used.
+function safeHref(url) {
+  return typeof url === 'string' && /^https?:\/\//i.test(url) ? url : null;
+}
+
+// Same rule as the server's dedupeKey (src/search.js), for jobs that arrive on later pages.
+function dedupeKey(job) {
+  const clean = (text) => (text ?? '').toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
+  return `${clean(job.title)}|${clean(job.company) || clean(job.location) || job.id}`;
+}
+
 function sourceName(id) {
   return state.sources.find((source) => source.id === id)?.name ?? id;
 }
 
 function renderSourceCredit(container, job) {
   const source = state.sources.find((s) => s.id === job.source);
-  const link = document.createElement('a');
-  link.href = job.sourceUrl ?? source?.homepage ?? '#';
-  link.target = '_blank';
-  link.rel = 'noopener';
+  const href = safeHref(job.sourceUrl) ?? safeHref(source?.homepage);
+  const link = href ? document.createElement('a') : document.createElement('span');
+  if (href) {
+    link.href = href;
+    link.target = '_blank';
+    link.rel = 'noopener';
+  }
   link.textContent = source?.name ?? job.source;
   if (job.publisher) {
     container.append(`via ${job.publisher} · found by `, link);
@@ -148,7 +163,9 @@ function renderJob(job) {
   renderSourceCredit(node.querySelector('.job-source'), job);
 
   const apply = node.querySelector('.apply-btn');
-  apply.href = job.url;
+  const applyUrl = safeHref(job.url);
+  if (applyUrl) apply.href = applyUrl;
+  else apply.hidden = true;
   apply.setAttribute('aria-label', `Apply for ${job.title}${job.company ? ` at ${job.company}` : ''} (opens in a new tab)`);
 
   const saveBtn = node.querySelector('.save-btn');
@@ -310,6 +327,8 @@ async function search({ append = false } = {}) {
   const requestId = ++state.requestId;
 
   if (!append) {
+    // A filter changed while the Saved or Sources tab was open still shows its results.
+    showTab('results');
     state.params = readForm();
     state.page = 1;
     state.jobs = [];
@@ -338,7 +357,7 @@ async function search({ append = false } = {}) {
     if (requestId !== state.requestId) return;
 
     for (const job of data.jobs) {
-      const key = `${job.title}|${job.company}`.toLowerCase();
+      const key = dedupeKey(job);
       if (state.seen.has(job.id) || state.seen.has(key)) continue;
       state.seen.add(job.id);
       state.seen.add(key);
@@ -470,7 +489,6 @@ async function loadMeta() {
 function bindEvents() {
   form.addEventListener('submit', (event) => {
     event.preventDefault();
-    showTab('results');
     search();
   });
 
@@ -490,7 +508,6 @@ function bindEvents() {
   for (const chip of document.querySelectorAll('.chip[data-q]')) {
     chip.addEventListener('click', () => {
       $('#q').value = chip.dataset.q;
-      showTab('results');
       search();
     });
   }

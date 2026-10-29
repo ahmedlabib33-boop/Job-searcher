@@ -62,8 +62,10 @@ if (isMainModule) {
   const port = Number(process.env.PORT) || 3000;
   createApp().listen(port, () => {
     console.log(`Cairo Job Finder is running at http://localhost:${port}`);
-    if (!process.env.JSEARCH_API_KEY) {
-      console.log('No JSEARCH_API_KEY set: showing remote jobs only. See README.md to add on-site Cairo jobs.');
+    const connected = PROVIDERS.filter((provider) => provider.isConfigured(process.env));
+    console.log(`Connected sources: ${connected.map((provider) => provider.name).join(', ')}`);
+    if (!connected.some((provider) => provider.modes.includes('onsite'))) {
+      console.log('No on-site source has an API key yet, so only remote jobs are shown. See README.md to add one.');
     }
   });
 }

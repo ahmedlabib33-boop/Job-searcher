@@ -3,13 +3,16 @@ import { describe, it } from 'node:test';
 import { parseSearchParams } from '../src/params.js';
 import { remoteok } from '../src/providers/remoteok.js';
 import { normalizeWwrItem, weworkremotely } from '../src/providers/weworkremotely.js';
-import { isOpenToEgypt, matchesKeywords, pageOf, parseRssItems, relativeAgeToIso } from '../src/util.js';
+import {
+  describesRemoteWork, isOpenToEgypt, matchesKeywords, pageOf, parseRssItems, relativeAgeToIso,
+} from '../src/util.js';
 import { fakeContext, NOW } from './helpers.js';
 
 describe('isOpenToEgypt', () => {
   it('keeps jobs open worldwide, to Egypt or to its region and time zone', () => {
     for (const text of ['', 'Remote', 'Anywhere in the World', 'Worldwide', 'EMEA', 'Egypt',
-      'Middle East & Africa', 'Time zone: CET (+/- 3 hours)', 'UTC+2']) {
+      'Middle East & Africa', 'Time zone: CET (+/- 3 hours)', 'UTC+2', 'Anywhere in EMEA', 'Anywhere in Africa',
+      'Anywhere in the Middle East']) {
       assert.equal(isOpenToEgypt(text), true, text);
     }
   });
@@ -28,6 +31,15 @@ describe('matchesKeywords', () => {
     assert.equal(matchesKeywords(['Senior React Developer'], 'react native'), false);
     assert.equal(matchesKeywords(['Anything'], ''), true);
   });
+
+  it('matches whole words, plurals included, not pieces of other words', () => {
+    assert.equal(matchesKeywords(['Chrome Extension Developer'], 'hr'), false);
+    assert.equal(matchesKeywords(['JavaScript Engineer'], 'java'), false);
+    assert.equal(matchesKeywords(['HR Manager'], 'hr'), true);
+    assert.equal(matchesKeywords(['Developers wanted'], 'developer'), true);
+    assert.equal(matchesKeywords(['C++ engineer', ['node.js']], 'c++ node.js'), true);
+    assert.equal(matchesKeywords(['محاسب أول'], 'محاسب'), true);
+  });
 });
 
 describe('pageOf', () => {
@@ -41,9 +53,23 @@ describe('pageOf', () => {
 describe('relativeAgeToIso', () => {
   it('turns Google-style ages into dates', () => {
     assert.equal(relativeAgeToIso('17 hours ago', NOW), '2026-10-28T19:00:00.000Z');
-    assert.equal(relativeAgeToIso('30+ days ago', NOW), '2026-09-29T12:00:00.000Z');
+    assert.equal(relativeAgeToIso('an hour ago', NOW), '2026-10-29T11:00:00.000Z');
+    assert.equal(relativeAgeToIso('a day ago', NOW), '2026-10-28T12:00:00.000Z');
     assert.equal(relativeAgeToIso('Just posted', NOW), '2026-10-29T12:00:00.000Z');
     assert.equal(relativeAgeToIso(undefined, NOW), null);
+  });
+
+  it('counts "30+ days" as older than 30 days', () => {
+    assert.equal(relativeAgeToIso('30+ days ago', NOW), '2026-09-28T12:00:00.000Z');
+  });
+});
+
+describe('describesRemoteWork', () => {
+  it('spots clear remote-work phrases and ignores negations', () => {
+    assert.equal(describesRemoteWork('This is a fully remote role.'), true);
+    assert.equal(describesRemoteWork('Option to work from home twice a week.'), true);
+    assert.equal(describesRemoteWork('This is not a remote position.'), false);
+    assert.equal(describesRemoteWork('Experience with remote sensing data.'), false);
   });
 });
 
@@ -88,6 +114,13 @@ describe('parseRssItems', () => {
     assert.equal(first.description, '<p>Close the books&nbsp;monthly.</p>');
     assert.deepEqual(first['media:content'], { url: 'https://wwr.example/acme.png', type: 'image/png' });
     assert.equal(second.description, '<p>US customers</p>');
+  });
+
+  it('reads empty elements as empty text and ignores tags inside CDATA', () => {
+    const [item] = parseRssItems('<item><region/><description><![CDATA[a<br/>b<link/>]]></description><link>https://x.example/1</link></item>');
+    assert.equal(item.region, '');
+    assert.equal(item.link, 'https://x.example/1');
+    assert.equal(item.br, undefined);
   });
 });
 

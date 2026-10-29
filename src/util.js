@@ -20,11 +20,11 @@ export function decodeEntities(text) {
 
 // Job descriptions arrive as HTML; the UI only ever shows plain text.
 export function htmlToText(html) {
-  if (!html) return '';
+  if (typeof html !== 'string' && typeof html !== 'number') return '';
   const text = String(html)
     .replace(/<(script|style)[\s\S]*?<\/\1>/gi, '')
     .replace(/<br\s*\/?>/gi, '\n')
-    .replace(/<li[^>]*>/gi, '\n• ')
+    .replace(/<li\b[^>]*>/gi, '\n• ')
     .replace(/<\/(p|div|h[1-6]|li|ul|ol|tr)>/gi, '\n')
     .replace(/<[^>]+>/g, '');
   return decodeEntities(text)
@@ -61,10 +61,15 @@ export function safeUrl(value) {
 
 export function toIsoDate(value) {
   if (value === null || value === undefined || value === '') return null;
-  // Numbers are Unix timestamps; anything below 1e12 is in seconds.
-  const date = typeof value === 'number'
-    ? new Date(value < 1e12 ? value * 1000 : value)
-    : new Date(value);
+  if (typeof value === 'number') {
+    // Unix timestamps; anything below 1e12 is in seconds. 0 means "no date".
+    if (!(value > 0)) return null;
+    return new Date(value < 1e12 ? value * 1000 : value).toISOString();
+  }
+  // A date and time with no time zone (Jooble sends these) would otherwise be
+  // read in the server's own time zone; treat it as UTC like the rest.
+  const text = String(value).trim();
+  const date = new Date(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?$/.test(text) ? `${text}Z` : text);
   return Number.isNaN(date.getTime()) ? null : date.toISOString();
 }
 
@@ -108,15 +113,26 @@ export function pageOf(items, page) {
   return { jobs: items.slice(start, start + PAGE_SIZE), hasMore: start + PAGE_SIZE < items.length };
 }
 
-// Local keyword search for sources that have no search of their own:
-// every word of the query must appear somewhere in the given fields.
+// The words a query is made of, for sources that are told what to search for.
+// `fallback` stands in for an empty query. Remote mode adds the word "remote".
+export function searchKeywords(params, fallback = '') {
+  return [params.q || fallback, params.mode === 'remote' ? 'remote' : ''].filter(Boolean).join(' ');
+}
+
+const escapeRegExp = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+// Local keyword search for sources that have no search of their own: every
+// word of the query must appear as a whole word (a plural also counts), so
+// "hr" doesn't match "Chrome" and "java" doesn't match "JavaScript".
 export function matchesKeywords(fields, query) {
   const words = String(query ?? '').toLowerCase().split(/\s+/).filter(Boolean);
   if (words.length === 0) return true;
   const haystack = fields.flat().filter(Boolean).join(' ').toLowerCase();
-  return words.every((word) => haystack.includes(word));
+  return words.every((word) =>
+    new RegExp(`(?<![\\p{L}\\p{N}])${escapeRegExp(word)}(?:e?s)?(?![\\p{L}\\p{N}])`, 'u').test(haystack));
 }
 
+const OPEN_REGIONS = /\b((?<!south )africa|middle east|mena|emea)\b/i;
 const OPEN_TO_EGYPT = /\b(worldwide|anywhere|global|egypt|cairo|(?<!south )africa|middle east|mena|emea|eet|cet|(gmt|utc) ?\+ ?[23])\b/i;
 
 // Remote boards describe who may apply in free text ("Anywhere in the World",
@@ -125,7 +141,9 @@ export function isOpenToEgypt(location) {
   const text = String(location ?? '').trim();
   if (!text || /^remote$/i.test(text)) return true;
   if (/egypt|cairo/i.test(text)) return true;
-  if (/anywhere in (?!the world)/i.test(text)) return false;
+  // "Anywhere in India" names somewhere else; "Anywhere in EMEA" includes Egypt.
+  const anywhereIn = text.match(/anywhere in (?!the world)(.+)/i);
+  if (anywhereIn) return OPEN_REGIONS.test(anywhereIn[1]);
   return OPEN_TO_EGYPT.test(text);
 }
 
@@ -135,19 +153,23 @@ function unwrapXmlText(content) {
 }
 
 // Minimal RSS reader: each <item> becomes an object of its child elements.
-// Text elements map to their (unescaped) text; self-closing elements such as
-// <media:content url="…"/> map to their attributes.
+// Text elements map to their (unescaped) text. Self-closing elements map to
+// their attributes, such as <media:content url="…"/>, or to '' when they
+// have none, such as an empty <region/>.
 export function parseRssItems(xml) {
   const items = [];
   for (const [, body] of String(xml).matchAll(/<item\b[^>]*>([\s\S]*?)<\/item>/gi)) {
     const item = {};
-    for (const [, tag, attributes] of body.matchAll(/<([\w:-]+)([^>]*?)\/>/g)) {
-      item[tag] ??= Object.fromEntries(
-        [...attributes.matchAll(/([\w:-]+)="([^"]*)"/g)].map(([, name, value]) => [name, decodeEntities(value)]),
-      );
-    }
     for (const [, tag, content] of body.matchAll(/<([\w:-]+)(?:\s[^>]*)?>([\s\S]*?)<\/\1>/g)) {
       item[tag] ??= unwrapXmlText(content);
+    }
+    // HTML inside CDATA (<br/>, <img/>) is description text, not item fields.
+    const outsideCdata = body.replace(/<!\[CDATA\[[\s\S]*?\]\]>/g, '');
+    for (const [, tag, attributes] of outsideCdata.matchAll(/<([\w:-]+)([^>]*?)\/>/g)) {
+      const pairs = [...attributes.matchAll(/([\w:-]+)="([^"]*)"/g)];
+      item[tag] ??= pairs.length
+        ? Object.fromEntries(pairs.map(([, name, value]) => [name, decodeEntities(value)]))
+        : '';
     }
     items.push(item);
   }
@@ -155,19 +177,30 @@ export function parseRssItems(xml) {
 }
 
 const RELATIVE_UNITS_MS = {
-  minute: 60_000, hour: 3_600_000, day: 86_400_000, week: 604_800_000, month: 2_592_000_000,
+  minute: 60_000, hour: 3_600_000, day: 86_400_000, week: 604_800_000, month: 2_592_000_000, year: 31_536_000_000,
 };
 
-// Google Jobs gives ages, not dates: "17 hours ago", "3 days ago", "30+ days ago".
+// Google Jobs gives ages, not dates: "17 hours ago", "a day ago", "30+ days ago".
+// "30+" means older than 30, so it is counted as one unit more and falls
+// outside a "last 30 days" filter.
 export function relativeAgeToIso(text, nowMs) {
   const value = String(text ?? '').toLowerCase();
   if (/just posted|today|just now/.test(value)) return new Date(nowMs).toISOString();
   if (/yesterday/.test(value)) return new Date(nowMs - RELATIVE_UNITS_MS.day).toISOString();
-  const match = value.match(/(\d+)\+?\s*(minute|hour|day|week|month)s?\s+ago/);
+  const match = value.match(/(\d+|an?|one)(\+?)\s*(minute|hour|day|week|month|year)s?\s+ago/);
   if (!match) return null;
-  return new Date(nowMs - Number(match[1]) * RELATIVE_UNITS_MS[match[2]]).toISOString();
+  const count = (/^\d+$/.test(match[1]) ? Number(match[1]) : 1) + (match[2] ? 1 : 0);
+  return new Date(nowMs - count * RELATIVE_UNITS_MS[match[3]]).toISOString();
 }
 
+// For short fields (title, location): any mention of remote work counts.
 export function looksRemote(...texts) {
   return /\b(remote|work from home|wfh|telecommute)\b/i.test(texts.filter(Boolean).join(' '));
+}
+
+// For long descriptions: only clear phrases count, and "not remote" doesn't.
+export function describesRemoteWork(text) {
+  const value = String(text ?? '');
+  if (/\b(not|no|non)[\s-]+remote\b|\bnot (a )?remote\b/i.test(value)) return false;
+  return /\b(fully remote|100% remote|remote[\s-](first|friendly|job|role|position|work|working|opportunity)|work(ing)? (from|at) home|wfh)\b/i.test(value);
 }

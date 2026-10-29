@@ -16,9 +16,14 @@ describe('htmlToText', () => {
     assert.equal(htmlToText('&#1605;&#1581;&#1575;&#1587;&#1576; &#x2013; Cairo'), 'محاسب – Cairo');
   });
 
-  it('handles empty input', () => {
+  it('handles empty and non-text input', () => {
     assert.equal(htmlToText(null), '');
     assert.equal(htmlToText(''), '');
+    assert.equal(htmlToText({}), '');
+  });
+
+  it('only turns real <li> tags into bullets', () => {
+    assert.equal(htmlToText('<link rel="x">Hello'), 'Hello');
   });
 });
 
@@ -56,6 +61,12 @@ describe('toIsoDate', () => {
   it('returns null for missing or invalid dates', () => {
     assert.equal(toIsoDate(null), null);
     assert.equal(toIsoDate('soon'), null);
+    assert.equal(toIsoDate(0), null);
+  });
+
+  it('reads dates without a time zone as UTC, whatever the server’s zone', () => {
+    assert.equal(toIsoDate('2026-10-28T10:15:00.0000000'), '2026-10-28T10:15:00.000Z');
+    assert.equal(toIsoDate('2026-10-28T10:15'), '2026-10-28T10:15:00.000Z');
   });
 });
 

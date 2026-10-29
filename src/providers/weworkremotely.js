@@ -55,14 +55,16 @@ export const weworkremotely = {
   },
 
   async search(params, { fetchText, cached, now }) {
-    const xml = await cached('weworkremotely:feed', CACHE_TTL_MS, () => fetchText(FEED_URL));
+    // The feed is parsed once per download; each search only filters it.
+    const jobs = await cached('weworkremotely:jobs', CACHE_TTL_MS, async () =>
+      parseRssItems(await fetchText(FEED_URL))
+        .map(normalizeWwrItem)
+        .filter((job) => job.url && isOpenToEgypt(job.region)));
     const nowMs = now();
-    const jobs = parseRssItems(xml)
-      .map(normalizeWwrItem)
-      .filter((job) => job.url && isOpenToEgypt(job.region))
+    const matches = jobs
       .filter((job) => !job.expiresAt || Date.parse(job.expiresAt) > nowMs)
       .filter((job) => matchesKeywords([job.title, job.company, job.category, job.skills], params.q))
       .map(({ category, skills, region, expiresAt, ...job }) => job);
-    return pageOf(jobs, params.page);
+    return pageOf(matches, params.page);
   },
 };

@@ -35,6 +35,17 @@ describe('TtlCache', () => {
     assert.equal(await cache.getOrLoad('k', 1000, async () => 'ok'), 'ok');
   });
 
+  it('treats a refreshed entry as new when deciding what to evict', async () => {
+    const clock = fakeClock();
+    const cache = new TtlCache({ maxEntries: 2, now: clock.now });
+    await cache.getOrLoad('feed', 1000, async () => 1);
+    await cache.getOrLoad('other', 100_000, async () => 2);
+    clock.advance(1001);
+    await cache.getOrLoad('feed', 1000, async () => 3);
+    await cache.getOrLoad('new', 100_000, async () => 4);
+    assert.deepEqual([...cache.entries.keys()], ['feed', 'new']);
+  });
+
   it('evicts the oldest entries when full', async () => {
     const cache = new TtlCache({ maxEntries: 2 });
     await cache.getOrLoad('a', 1000, async () => 1);

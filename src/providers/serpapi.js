@@ -1,5 +1,7 @@
 import { findArea } from '../areas.js';
-import { htmlToText, looksRemote, normalizeJobType, relativeAgeToIso, safeUrl, truncate } from '../util.js';
+import {
+  describesRemoteWork, htmlToText, looksRemote, normalizeJobType, relativeAgeToIso, safeUrl, searchKeywords, truncate,
+} from '../util.js';
 
 // SerpApi's Google Jobs engine: a second route to Google for Jobs (LinkedIn,
 // Indeed, Wuzzuf, Bayt, Glassdoor, company sites), alongside JSearch.
@@ -7,23 +9,26 @@ import { htmlToText, looksRemote, normalizeJobType, relativeAgeToIso, safeUrl, t
 const SEARCH_URL = 'https://serpapi.com/search.json';
 // The free plan has 250 searches a month, so identical searches are reused for hours.
 const CACHE_TTL_MS = 6 * 60 * 60 * 1000;
+// Each page needs the previous page's token. If the cache was emptied (say,
+// by a restart), page N costs N searches, so paging stops after a few pages.
+const MAX_PAGE = 5;
 
 export function buildSerpApiQuery(params) {
-  const what = [params.q || 'jobs', params.mode === 'remote' ? 'remote' : ''].filter(Boolean).join(' ');
-  return `${what} in ${findArea(params.area).query}`;
+  return `${searchKeywords(params, 'jobs')} in ${findArea(params.area).query}`;
 }
 
 export function normalizeSerpApiJob(raw, nowMs) {
   const description = htmlToText(raw.description);
   const extensions = raw.detected_extensions ?? {};
   const location = htmlToText(raw.location);
+  const title = htmlToText(raw.title) || 'Untitled job';
   return {
     id: `serpapi:${raw.job_id}`,
-    title: htmlToText(raw.title) || 'Untitled job',
+    title,
     company: htmlToText(raw.company_name) || null,
     companyLogo: safeUrl(raw.thumbnail),
     location: location || null,
-    remote: extensions.work_from_home === true || looksRemote(location),
+    remote: extensions.work_from_home === true || looksRemote(title, location) || describesRemoteWork(description),
     type: normalizeJobType(extensions.schedule_type),
     postedAt: relativeAgeToIso(extensions.posted_at, nowMs),
     salary: extensions.salary || null,
@@ -49,6 +54,7 @@ export const serpapi = {
   },
 
   async search(params, { env, fetchJson, cached, now }) {
+    if (params.page > MAX_PAGE) return { jobs: [], hasMore: false };
     const base = new URLSearchParams({ engine: 'google_jobs', q: buildSerpApiQuery(params), gl: 'eg', hl: 'en' });
 
     // Google Jobs pages with a token from the previous page, so page N first
@@ -70,7 +76,7 @@ export const serpapi = {
     const nowMs = now();
     return {
       jobs: data.filter((raw) => raw?.job_id).map((raw) => normalizeSerpApiJob(raw, nowMs)),
-      hasMore: Boolean(body?.serpapi_pagination?.next_page_token),
+      hasMore: params.page < MAX_PAGE && Boolean(body?.serpapi_pagination?.next_page_token),
     };
   },
 };

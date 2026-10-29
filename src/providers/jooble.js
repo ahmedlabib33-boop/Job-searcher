@@ -1,5 +1,7 @@
 import { findArea } from '../areas.js';
-import { htmlToText, looksRemote, normalizeJobType, safeUrl, toIsoDate, truncate } from '../util.js';
+import {
+  describesRemoteWork, htmlToText, looksRemote, normalizeJobType, safeUrl, searchKeywords, toIsoDate, truncate,
+} from '../util.js';
 
 // Jooble collects jobs from many job sites. Each country has its own API key:
 // a key from eg.jooble.org returns jobs in Egypt.
@@ -19,7 +21,7 @@ export function normalizeJoobleJob(raw) {
     company: htmlToText(raw.company) || null,
     companyLogo: null,
     location: location || null,
-    remote: looksRemote(title, location),
+    remote: looksRemote(title, location) || describesRemoteWork(summary),
     type: normalizeJobType(raw.type),
     postedAt: toIsoDate(raw.updated),
     salary: htmlToText(raw.salary) || null,
@@ -46,7 +48,7 @@ export const jooble = {
 
   async search(params, { env, fetchJson, cached }) {
     const request = {
-      keywords: [params.q, params.mode === 'remote' ? 'remote' : ''].filter(Boolean).join(' '),
+      keywords: searchKeywords(params),
       location: findArea(params.area).place,
       page: String(params.page),
       ResultOnPage: String(PAGE_SIZE),

@@ -71,6 +71,16 @@ describe('searchJobs', () => {
     assert.deepEqual(result.jobs.map((j) => j.id), ['a:1']);
   });
 
+  it('keeps same-titled jobs apart when there is no company name to compare', async () => {
+    const result = await run([provider('a', [
+      job({ id: 'a:1', title: 'Accountant', company: null, location: 'Maadi' }),
+      job({ id: 'a:2', title: 'Accountant', company: null, location: 'Giza' }),
+      job({ id: 'a:3', title: 'Accountant', company: null, location: null }),
+      job({ id: 'a:4', title: 'Accountant', company: null, location: null }),
+    ])]);
+    assert.deepEqual(result.jobs.map((j) => j.id).sort(), ['a:1', 'a:2', 'a:3', 'a:4']);
+  });
+
   it('applies work mode, type and date filters to every source', async () => {
     const jobs = [
       job({ title: 'Remote FT', remote: true }),

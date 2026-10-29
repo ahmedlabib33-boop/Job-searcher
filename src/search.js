@@ -15,9 +15,12 @@ export function matchesFilters(job, params, nowMs) {
   return true;
 }
 
-function dedupeKey(job) {
+// The same job posted on several sites has the same title and company. Without
+// a company name, "Accountant" in Maadi and "Accountant" in Giza are different
+// jobs, so the location (or, failing that, the job's own id) is used instead.
+export function dedupeKey(job) {
   const clean = (text) => (text ?? '').toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
-  return `${clean(job.title)}|${clean(job.company)}`;
+  return `${clean(job.title)}|${clean(job.company) || clean(job.location) || job.id}`;
 }
 
 export function dedupeJobs(jobs) {

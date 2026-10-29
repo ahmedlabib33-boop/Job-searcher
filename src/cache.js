@@ -12,6 +12,9 @@ export class TtlCache {
     if (hit && hit.expiresAt > this.now()) return hit.value;
 
     const value = Promise.resolve().then(load);
+    // Re-inserting moves a refreshed entry to the back, so the oldest entries
+    // are the ones evicted when the cache is full.
+    this.entries.delete(key);
     this.entries.set(key, { value, expiresAt: this.now() + ttlMs });
     this.#evictOverflow();
     // Failures must not be cached, or one bad response would stick for the whole TTL.
