@@ -1,0 +1,19 @@
+{
+  "name": "cairo-job-finder",
+  "version": "0.1.0",
+  "description": "Search on-site and remote jobs across Greater Cairo from several job sources in one place.",
+  "private": true,
+  "type": "module",
+  "main": "src/server.js",
+  "engines": {
+    "node": ">=22.9"
+  },
+  "scripts": {
+    "start": "node --env-file-if-exists=.env src/server.js",
+    "dev": "node --watch --env-file-if-exists=.env src/server.js",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "express": "^5.1.0"
+  }
+}

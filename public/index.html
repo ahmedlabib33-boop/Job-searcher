@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Cairo Job Finder</title>
+  <meta name="description" content="Search on-site and remote jobs across Greater Cairo from several job sources at once.">
+  <meta name="theme-color" content="#0f6b63">
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="styles.css">
+  <script src="app.js" type="module"></script>
+</head>
+<body>
+  <header class="site-header">
+    <div class="wrap header-inner">
+      <a class="brand" href="./">
+        <img class="brand-mark" src="icon.svg" alt="" width="36" height="36">
+        <span>
+          <span class="brand-name">Cairo Job Finder</span>
+          <span class="brand-tag">On-site and remote jobs across Greater Cairo</span>
+        </span>
+      </a>
+    </div>
+  </header>
+
+  <main class="wrap">
+    <form id="search-form" class="search-card" role="search">
+      <div class="search-row">
+        <label class="field field-grow">
+          <span class="field-label">What</span>
+          <span class="input-icon">
+            <svg aria-hidden="true" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+            <input id="q" name="q" type="search" placeholder="Job title, skill or company" autocomplete="off" maxlength="100" dir="auto">
+          </span>
+        </label>
+        <label class="field">
+          <span class="field-label">Where in Cairo</span>
+          <select id="area" name="area">
+            <option value="all">All of Greater Cairo</option>
+          </select>
+        </label>
+        <button class="btn btn-primary search-btn" type="submit">Search</button>
+      </div>
+
+      <div class="filter-row">
+        <fieldset class="segmented" id="mode">
+          <legend class="visually-hidden">Work mode</legend>
+          <button type="button" data-mode="any" aria-pressed="true">Any</button>
+          <button type="button" data-mode="onsite" aria-pressed="false">On-site</button>
+          <button type="button" data-mode="remote" aria-pressed="false">Remote</button>
+        </fieldset>
+        <label class="field field-inline">
+          <span class="field-label">Type</span>
+          <select id="type" name="type">
+            <option value="any">Any type</option>
+            <option value="fulltime">Full-time</option>
+            <option value="parttime">Part-time</option>
+            <option value="contract">Contract / freelance</option>
+            <option value="internship">Internship</option>
+          </select>
+        </label>
+        <label class="field field-inline">
+          <span class="field-label">Posted</span>
+          <select id="posted" name="posted">
+            <option value="any">Any time</option>
+            <option value="1">Last 24 hours</option>
+            <option value="3">Last 3 days</option>
+            <option value="7">Last week</option>
+            <option value="30">Last month</option>
+          </select>
+        </label>
+      </div>
+
+      <div class="suggestions" aria-label="Popular searches">
+        <span class="suggestions-label">Popular:</span>
+        <button type="button" class="chip" data-q="Software engineer">Software engineer</button>
+        <button type="button" class="chip" data-q="Accountant">Accountant</button>
+        <button type="button" class="chip" data-q="Customer service">Customer service</button>
+        <button type="button" class="chip" data-q="Sales">Sales</button>
+        <button type="button" class="chip" data-q="Graphic designer">Graphic designer</button>
+        <button type="button" class="chip" data-q="Data analyst">Data analyst</button>
+        <button type="button" class="chip" data-q="Marketing">Marketing</button>
+      </div>
+    </form>
+
+    <div id="setup-notice" class="notice" hidden>
+      <strong>Showing remote jobs only.</strong>
+      On-site jobs in Cairo (from LinkedIn, Indeed, Wuzzuf, Bayt and company sites) need a free JSearch API key.
+      Add <code>JSEARCH_API_KEY</code> to your <code>.env</code> file. The README explains how.
+    </div>
+
+    <div class="tabs" role="tablist">
+      <button type="button" role="tab" id="tab-results" aria-selected="true" aria-controls="panel-results">Results</button>
+      <button type="button" role="tab" id="tab-saved" aria-selected="false" aria-controls="panel-saved">
+        Saved <span id="saved-count" class="count-badge">0</span>
+      </button>
+    </div>
+
+    <section id="panel-results" role="tabpanel" aria-labelledby="tab-results">
+      <div class="results-bar">
+        <p id="status" class="status" aria-live="polite"></p>
+        <ul id="sources" class="sources" aria-label="Job sources"></ul>
+      </div>
+      <ol id="results" class="job-list"></ol>
+      <div class="load-more-wrap">
+        <button id="load-more" type="button" class="btn btn-secondary" hidden>Load more jobs</button>
+      </div>
+    </section>
+
+    <section id="panel-saved" role="tabpanel" aria-labelledby="tab-saved" hidden>
+      <p id="saved-status" class="status"></p>
+      <ol id="saved" class="job-list"></ol>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="wrap">
+      Jobs come from
+      <a href="https://himalayas.app" target="_blank" rel="noopener">Himalayas</a>,
+      <a href="https://jobicy.com" target="_blank" rel="noopener">Jobicy</a> and
+      <a href="https://www.openwebninja.com/api/jsearch" target="_blank" rel="noopener">JSearch</a>.
+      Apply links go to the original posting.
+    </div>
+  </footer>
+
+  <template id="job-template">
+    <li class="job">
+      <article>
+        <div class="job-head">
+          <div class="logo"><span class="logo-initials" aria-hidden="true"></span></div>
+          <div class="job-titles">
+            <h3 class="job-title" dir="auto"></h3>
+            <p class="job-meta"><span class="job-company" dir="auto"></span><span class="job-location" dir="auto"></span></p>
+          </div>
+          <button type="button" class="save-btn" aria-pressed="false">
+            <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M6 3h12a1 1 0 0 1 1 1v17l-7-4.5L5 21V4a1 1 0 0 1 1-1z"/></svg>
+          </button>
+        </div>
+        <ul class="tags"></ul>
+        <p class="job-summary" dir="auto"></p>
+        <details class="job-details">
+          <summary>Show full description</summary>
+          <div class="job-description" dir="auto"></div>
+        </details>
+        <div class="job-foot">
+          <span class="job-source"></span>
+          <a class="btn btn-primary apply-btn" target="_blank" rel="noopener noreferrer">Apply</a>
+        </div>
+      </article>
+    </li>
+  </template>
+</body>
+</html>
