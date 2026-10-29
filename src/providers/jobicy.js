@@ -1,5 +1,4 @@
-import { PAGE_SIZE } from '../params.js';
-import { formatSalary, htmlToText, normalizeJobType, safeUrl, toIsoDate, truncate } from '../util.js';
+import { formatSalary, htmlToText, normalizeJobType, pageOf, safeUrl, toIsoDate, truncate } from '../util.js';
 
 // Fully remote jobs that can be done from anywhere in the world.
 // API terms: credit Jobicy with a link and send Apply clicks to the job's own
@@ -54,10 +53,6 @@ export const jobicy = {
     // The feed is small, so it is fetched whole once and paged through locally.
     const body = await cached(`jobicy:${url.search}`, CACHE_TTL_MS, () => fetchJson(url));
     const all = (Array.isArray(body?.jobs) ? body.jobs : []).filter((raw) => raw?.id && raw.url);
-    const start = (params.page - 1) * PAGE_SIZE;
-    return {
-      jobs: all.slice(start, start + PAGE_SIZE).map(normalizeJobicyJob),
-      hasMore: start + PAGE_SIZE < all.length,
-    };
+    return pageOf(all.map(normalizeJobicyJob), params.page);
   },
 };

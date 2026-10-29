@@ -60,9 +60,10 @@ export const jsearch = {
   id: 'jsearch',
   name: 'JSearch',
   homepage: 'https://www.openwebninja.com/api/jsearch',
-  description: 'On-site jobs in Cairo from LinkedIn, Indeed, Wuzzuf, Bayt and company sites (via Google for Jobs)',
+  signupUrl: 'https://rapidapi.com/letscrape-6bRBa3QguO5/api/jsearch',
+  description: 'On-site jobs in Cairo from LinkedIn, Indeed, Wuzzuf, Bayt and company sites, through Google for Jobs',
   modes: ['onsite', 'remote'],
-  setupHint: 'Add a free JSEARCH_API_KEY to .env to see on-site jobs in Cairo.',
+  setupHint: 'Add JSEARCH_API_KEY to .env (free plan on RapidAPI).',
 
   isConfigured(env) {
     return Boolean(env.JSEARCH_API_KEY);

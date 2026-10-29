@@ -4,25 +4,7 @@ import { parseSearchParams } from '../src/params.js';
 import { describeHimalayasLocation, himalayas, normalizeHimalayasJob } from '../src/providers/himalayas.js';
 import { jobicy, normalizeJobicyJob } from '../src/providers/jobicy.js';
 import { buildJsearchQuery, jsearch, normalizeJsearchJob } from '../src/providers/jsearch.js';
-
-const NOW = Date.parse('2026-10-29T12:00:00Z');
-
-// A provider context that records requests and answers with canned bodies.
-function fakeContext(body, env = {}) {
-  const requests = [];
-  return {
-    requests,
-    ctx: {
-      env,
-      now: () => NOW,
-      cached: (key, ttl, load) => load(),
-      fetchJson: async (url, options = {}) => {
-        requests.push({ url: new URL(url), headers: options.headers ?? {} });
-        return body;
-      },
-    },
-  };
-}
+import { fakeContext, NOW } from './helpers.js';
 
 const jsearchJob = {
   job_id: 'abc123',
@@ -74,7 +56,7 @@ describe('JSearch', () => {
   });
 
   it('sends filters and the RapidAPI key', async () => {
-    const { ctx, requests } = fakeContext({ data: [jsearchJob] }, { JSEARCH_API_KEY: 'secret' });
+    const { ctx, requests } = fakeContext({ data: [jsearchJob] }, { env: { JSEARCH_API_KEY: 'secret' } });
     const params = parseSearchParams({ q: 'accountant', posted: '7', type: 'parttime', mode: 'remote', page: '2' });
     const result = await jsearch.search(params, ctx);
 
@@ -92,7 +74,7 @@ describe('JSearch', () => {
   });
 
   it('can use an OpenWeb Ninja key instead', async () => {
-    const { ctx, requests } = fakeContext({ data: [] }, { JSEARCH_API_KEY: 'secret', JSEARCH_PROVIDER: 'openwebninja' });
+    const { ctx, requests } = fakeContext({ data: [] }, { env: { JSEARCH_API_KEY: 'secret', JSEARCH_PROVIDER: 'openwebninja' } });
     await jsearch.search(parseSearchParams({}), ctx);
     assert.equal(requests[0].url.host, 'api.openwebninja.com');
     assert.deepEqual(requests[0].headers, { 'x-api-key': 'secret' });
@@ -196,9 +178,9 @@ describe('Jobicy', () => {
     const first = await jobicy.search(parseSearchParams({ q: 'support' }), ctx);
     const second = await jobicy.search(parseSearchParams({ q: 'support', page: '2' }), ctx);
 
+    assert.equal(requests.length, 1, 'the second page comes from the cached feed');
     assert.equal(requests[0].url.searchParams.get('geo'), 'anywhere');
     assert.equal(requests[0].url.searchParams.get('tag'), 'support');
-    assert.equal(requests[0].url.search, requests[1].url.search, 'both pages use the same cached feed');
     assert.equal(first.jobs.length, 20);
     assert.equal(first.hasMore, true);
     assert.deepEqual(second.jobs.map((job) => job.id), ['jobicy:21', 'jobicy:22', 'jobicy:23', 'jobicy:24', 'jobicy:25']);

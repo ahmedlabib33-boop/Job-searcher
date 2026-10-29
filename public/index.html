@@ -85,14 +85,18 @@
 
     <div id="setup-notice" class="notice" hidden>
       <strong>Showing remote jobs only.</strong>
-      On-site jobs in Cairo (from LinkedIn, Indeed, Wuzzuf, Bayt and company sites) need a free JSearch API key.
-      Add <code>JSEARCH_API_KEY</code> to your <code>.env</code> file. The README explains how.
+      On-site jobs in Cairo (from LinkedIn, Indeed, Wuzzuf, Bayt and company sites) need a free API key from
+      <span id="setup-sources">one of the on-site sources</span>.
+      <button type="button" class="link-btn" id="show-sources">See how to connect them</button>
     </div>
 
     <div class="tabs" role="tablist">
       <button type="button" role="tab" id="tab-results" aria-selected="true" aria-controls="panel-results">Results</button>
       <button type="button" role="tab" id="tab-saved" aria-selected="false" aria-controls="panel-saved">
         Saved <span id="saved-count" class="count-badge">0</span>
+      </button>
+      <button type="button" role="tab" id="tab-sources" aria-selected="false" aria-controls="panel-sources">
+        Sources <span id="sources-count" class="count-badge">0</span>
       </button>
     </div>
 
@@ -111,14 +115,19 @@
       <p id="saved-status" class="status"></p>
       <ol id="saved" class="job-list"></ol>
     </section>
+
+    <section id="panel-sources" role="tabpanel" aria-labelledby="tab-sources" hidden>
+      <p class="status">
+        Every search runs on all connected sources at once. LinkedIn, Wuzzuf, Indeed, Bayt and Glassdoor don’t let
+        other apps read their jobs directly, so their listings come in through the Google-based sources (JSearch and SerpApi).
+      </p>
+      <ul id="source-list" class="source-list"></ul>
+    </section>
   </main>
 
   <footer class="site-footer">
     <div class="wrap">
-      Jobs come from
-      <a href="https://himalayas.app" target="_blank" rel="noopener">Himalayas</a>,
-      <a href="https://jobicy.com" target="_blank" rel="noopener">Jobicy</a> and
-      <a href="https://www.openwebninja.com/api/jsearch" target="_blank" rel="noopener">JSearch</a>.
+      Jobs come from <span id="footer-sources">several job sources</span>.
       Apply links go to the original posting.
     </div>
   </footer>

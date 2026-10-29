@@ -8,13 +8,32 @@ export class UpstreamError extends Error {
   }
 }
 
-export async function fetchJson(url, { headers = {}, timeoutMs = 12_000 } = {}) {
+async function request(url, { method = 'GET', headers = {}, body, timeoutMs = 12_000, accept }) {
   const response = await fetch(url, {
-    headers: { accept: 'application/json', 'user-agent': USER_AGENT, ...headers },
+    method,
+    headers: { accept, 'user-agent': USER_AGENT, ...headers },
+    body,
     signal: AbortSignal.timeout(timeoutMs),
   });
   if (!response.ok) throw new UpstreamError(response.status, String(url));
+  return response;
+}
+
+// Pass `json` to send a JSON request body (the request then becomes a POST).
+export async function fetchJson(url, { json, ...options } = {}) {
+  if (json !== undefined) {
+    options.method ??= 'POST';
+    options.headers = { 'content-type': 'application/json', ...options.headers };
+    options.body = JSON.stringify(json);
+  }
+  const response = await request(url, { accept: 'application/json', ...options });
   return response.json();
+}
+
+// For RSS and other XML feeds.
+export async function fetchText(url, options = {}) {
+  const response = await request(url, { accept: 'application/rss+xml, application/xml, text/xml, */*', ...options });
+  return response.text();
 }
 
 // A short reason that is safe to show in the UI (no URLs, keys or stack traces).

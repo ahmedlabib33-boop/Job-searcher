@@ -3,7 +3,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import express from 'express';
 import { AREAS } from './areas.js';
 import { TtlCache } from './cache.js';
-import { fetchJson as defaultFetchJson } from './http.js';
+import { fetchJson as defaultFetchJson, fetchText as defaultFetchText } from './http.js';
 import { parseSearchParams } from './params.js';
 import { PROVIDERS } from './providers/index.js';
 import { describeSource, searchJobs } from './search.js';
@@ -14,6 +14,7 @@ export function createApp({
   providers = PROVIDERS,
   env = process.env,
   fetchJson = defaultFetchJson,
+  fetchText = defaultFetchText,
   cache = new TtlCache(),
   now = Date.now,
   log = console.warn,
@@ -38,7 +39,8 @@ export function createApp({
 
   app.get('/api/search', async (req, res) => {
     const params = parseSearchParams(req.query);
-    const result = await searchJobs(params, { providers, env, fetchJson, cache, now, log });
+    const client = { ip: req.ip, userAgent: req.get('user-agent'), referer: req.get('referer') };
+    const result = await searchJobs(params, { providers, env, fetchJson, fetchText, cache, now, log, client });
     res.set('Cache-Control', 'no-store');
     res.json({ params, ...result });
   });

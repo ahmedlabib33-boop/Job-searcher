@@ -40,6 +40,7 @@ export function describeSource(provider, env) {
     id: provider.id,
     name: provider.name,
     homepage: provider.homepage,
+    signupUrl: provider.signupUrl ?? null,
     description: provider.description,
     modes: provider.modes,
     configured: provider.isConfigured(env),
@@ -68,10 +69,14 @@ async function searchOne(provider, params, ctx) {
   }
 }
 
-export async function searchJobs(params, { providers, env, fetchJson, cache, now = Date.now, log }) {
+// `client` describes the visitor (IP address, browser, page); a few sources
+// require it with every request.
+export async function searchJobs(params, { providers, env, fetchJson, fetchText, cache, now = Date.now, log, client }) {
   const ctx = {
     env,
+    client,
     fetchJson,
+    fetchText,
     now,
     log,
     cached: (key, ttlMs, load) => cache.getOrLoad(key, ttlMs, load),

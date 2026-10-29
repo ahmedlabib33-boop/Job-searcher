@@ -2,6 +2,8 @@ import assert from 'node:assert/strict';
 import { after, before, describe, it } from 'node:test';
 import { createApp } from '../src/server.js';
 
+let lastClient = null;
+
 const provider = {
   id: 'fake',
   name: 'Fake Jobs',
@@ -10,19 +12,22 @@ const provider = {
   modes: ['onsite', 'remote'],
   setupHint: null,
   isConfigured: () => true,
-  search: async (params) => ({
-    jobs: [{
-      id: `fake:${params.q}`,
-      title: `${params.q} role`,
-      company: 'Test Co',
-      remote: false,
-      type: 'fulltime',
-      postedAt: new Date().toISOString(),
-      url: 'https://fake.example/apply',
-      source: 'fake',
-    }],
-    hasMore: false,
-  }),
+  search: async (params, ctx) => {
+    lastClient = ctx.client;
+    return {
+      jobs: [{
+        id: `fake:${params.q}`,
+        title: `${params.q} role`,
+        company: 'Test Co',
+        remote: false,
+        type: 'fulltime',
+        postedAt: new Date().toISOString(),
+        url: 'https://fake.example/apply',
+        source: 'fake',
+      }],
+      hasMore: false,
+    };
+  },
 };
 
 describe('server', () => {
@@ -46,6 +51,13 @@ describe('server', () => {
     assert.equal(body.params.area, 'heliopolis');
     assert.deepEqual(body.jobs.map((job) => job.title), ['pharmacist role']);
     assert.equal(body.sources[0].status, 'ok');
+  });
+
+  it('passes the visitor’s browser and page on to sources that need them', async () => {
+    await fetch(`${base}/api/search?q=nurse`, { headers: { 'user-agent': 'TestBrowser/1.0', referer: 'http://localhost/?q=nurse' } });
+    assert.equal(lastClient.userAgent, 'TestBrowser/1.0');
+    assert.equal(lastClient.referer, 'http://localhost/?q=nurse');
+    assert.ok(lastClient.ip);
   });
 
   it('lists areas and sources through /api/meta', async () => {

@@ -192,7 +192,8 @@ function renderSaved() {
 }
 
 function renderSources() {
-  const chips = state.sources.map((source) => {
+  const connected = state.sources.filter((source) => source.status !== 'not_configured');
+  const chips = connected.map((source) => {
     const li = document.createElement('li');
     li.className = 'source';
     let label = source.name;
@@ -201,12 +202,7 @@ function renderSources() {
       label += ` · ${state.sourceCounts[source.id] ?? 0}`;
     } else if (source.status === 'error') {
       li.classList.add('error');
-      label += ' · unavailable';
-      li.title = source.message ?? '';
-    } else if (source.status === 'not_configured') {
-      li.classList.add('off');
-      label += ' · needs API key';
-      li.title = source.setupHint ?? '';
+      label += ` · ${source.message ?? 'unavailable'}`;
     } else if (source.status === 'skipped') {
       li.classList.add('off');
       label += ' · not used';
@@ -217,6 +213,18 @@ function renderSources() {
     li.textContent = label;
     return li;
   });
+
+  const notConnected = state.sources.length - connected.length;
+  if (notConnected > 0) {
+    const li = document.createElement('li');
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'source source-more';
+    button.textContent = `+${notConnected} not connected`;
+    button.addEventListener('click', () => showTab('sources'));
+    li.append(button);
+    chips.push(li);
+  }
   sourcesEl.replaceChildren(...chips);
 }
 
@@ -234,15 +242,14 @@ function renderResults() {
   statusEl.classList.remove('error');
 
   if (count === 0) {
-    const jsearch = state.sources.find((source) => source.id === 'jsearch');
     const allFailed = state.sources.every((s) => s.status === 'error' || s.status === 'not_configured' || s.status === 'skipped')
       && state.sources.some((s) => s.status === 'error');
     statusEl.textContent = 'No jobs found.';
     if (allFailed) {
       statusEl.classList.add('error');
       renderEmpty(resultsList, 'Job sources could not be reached', 'Check your internet connection and try again in a minute.');
-    } else if (state.params.mode === 'onsite' && jsearch && !jsearch.configured) {
-      renderEmpty(resultsList, 'On-site jobs need a JSearch API key', 'Add JSEARCH_API_KEY to your .env file (see the README), or switch the work mode to “Any” to see remote jobs.');
+    } else if (state.params.mode === 'onsite' && !hasOnsiteSource()) {
+      renderEmpty(resultsList, 'On-site jobs need an API key', 'Connect one of the on-site sources (see the Sources tab), or switch the work mode to “Any” to see remote jobs.');
     } else {
       renderEmpty(resultsList, 'No jobs match this search', 'Try a broader job title, another area, or fewer filters.');
     }
@@ -371,12 +378,68 @@ async function search({ append = false } = {}) {
 // ---------- Setup ----------
 
 function showTab(name) {
-  for (const tab of ['results', 'saved']) {
+  for (const tab of ['results', 'saved', 'sources']) {
     const active = tab === name;
     $(`#tab-${tab}`).setAttribute('aria-selected', String(active));
     $(`#panel-${tab}`).hidden = !active;
   }
   if (name === 'saved') renderSaved();
+}
+
+function isOnsiteSource(source) {
+  return source.modes.includes('onsite');
+}
+
+function hasOnsiteSource() {
+  return state.sources.some((source) => source.configured && isOnsiteSource(source));
+}
+
+function externalLink(href, text) {
+  const link = document.createElement('a');
+  link.href = href;
+  link.target = '_blank';
+  link.rel = 'noopener';
+  link.textContent = text;
+  return link;
+}
+
+function listWithOr(names) {
+  return names.length > 1 ? `${names.slice(0, -1).join(', ')} or ${names.at(-1)}` : (names[0] ?? '');
+}
+
+function renderSourceList(sources) {
+  const items = sources.map((source) => {
+    const li = document.createElement('li');
+    li.className = 'source-card';
+
+    const head = document.createElement('div');
+    head.className = 'source-card-head';
+    const name = document.createElement('h3');
+    name.append(externalLink(source.homepage, source.name));
+    const badge = document.createElement('span');
+    badge.className = `badge ${source.configured ? 'badge-on' : 'badge-off'}`;
+    badge.textContent = source.configured ? 'Connected' : 'Not connected';
+    head.append(name, badge);
+
+    const kind = document.createElement('p');
+    kind.className = 'source-kind';
+    kind.textContent = isOnsiteSource(source) ? 'On-site jobs in Cairo' : 'Remote jobs';
+
+    const description = document.createElement('p');
+    description.textContent = source.description;
+    li.append(head, kind, description);
+
+    if (!source.configured) {
+      const setup = document.createElement('p');
+      setup.className = 'source-setup';
+      setup.append(source.setupHint ?? '');
+      if (source.signupUrl) setup.append(' ', externalLink(source.signupUrl, 'Get a free key'));
+      li.append(setup);
+    }
+    return li;
+  });
+  $('#source-list').replaceChildren(...items);
+  $('#sources-count').textContent = `${sources.filter((s) => s.configured).length}/${sources.length}`;
 }
 
 async function loadMeta() {
@@ -386,8 +449,19 @@ async function loadMeta() {
     state.areas = meta.areas;
     state.sources = meta.sources;
     $('#area').replaceChildren(...meta.areas.map((area) => new Option(area.label, area.id)));
-    const jsearch = meta.sources.find((source) => source.id === 'jsearch');
-    $('#setup-notice').hidden = !jsearch || jsearch.configured;
+
+    const missing = meta.sources.filter((source) => isOnsiteSource(source) && !source.configured);
+    $('#setup-sources').textContent = listWithOr(missing.map((source) => source.name));
+    $('#setup-notice').hidden = hasOnsiteSource() || missing.length === 0;
+
+    const footer = $('#footer-sources');
+    footer.replaceChildren();
+    meta.sources.forEach((source, index) => {
+      if (index > 0) footer.append(index === meta.sources.length - 1 ? ' and ' : ', ');
+      footer.append(externalLink(source.homepage, source.name));
+    });
+
+    renderSourceList(meta.sources);
   } catch {
     // The search itself reports connection problems.
   }
@@ -424,6 +498,8 @@ function bindEvents() {
   loadMoreBtn.addEventListener('click', () => search({ append: true }));
   $('#tab-results').addEventListener('click', () => showTab('results'));
   $('#tab-saved').addEventListener('click', () => showTab('saved'));
+  $('#tab-sources').addEventListener('click', () => showTab('sources'));
+  $('#show-sources').addEventListener('click', () => showTab('sources'));
 }
 
 async function init() {
